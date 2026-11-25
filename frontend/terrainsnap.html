@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DEPTH WIZARD</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --bg-0:#05080A; --bg-1:#0A0F12; --bg-2:#0F1519;
+    --line-hi:#C7D2D4; --line-mid:#7E8C90; --line-lo:#43494C;
+    --cyan:#67E8F9; --amber:#F5A623; --red:#FF5C5C;
+    --text-hi:#EFF5F5; --text-mid:#9AA6A9; --text-lo:#5B6467;
+    --mono:'IBM Plex Mono',monospace; --sans:'Space Grotesk',sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{width:100%; height:100%; background:var(--bg-0); color:var(--text-hi); font-family:var(--sans); overflow:hidden; user-select:none;}
+  #app{position:relative; width:100vw; height:100vh;}
+  canvas{display:block;}
+
+  .layer{position:absolute; inset:0; pointer-events:none;}
+  .layer.active{pointer-events:auto;}
+
+  /* ---------- shared type ---------- */
+  .mono{font-family:var(--mono); letter-spacing:.04em;}
+  .label{font-family:var(--mono); font-size:10px; letter-spacing:.14em; color:var(--text-lo); text-transform:uppercase;}
+  .value{font-family:var(--mono); font-size:20px; color:var(--text-hi); font-weight:500;}
+  .value small{font-size:10px; color:var(--text-mid); font-weight:400; margin-left:3px;}
+
+  /* ---------- INTRO ---------- */
+  #intro{background:var(--bg-0); display:flex; align-items:center; justify-content:center; flex-direction:column; z-index:50; transition:opacity 1.1s ease;}
+  #intro canvas{position:absolute; inset:0;}
+  #intro-copy{position:relative; text-align:center; opacity:0; transform:translateY(14px); transition:opacity 1.4s ease, transform 1.4s ease;}
+  #intro-copy.show{opacity:1; transform:translateY(0);}
+  #intro-mark{font-family:var(--mono); font-size:12px; letter-spacing:.32em; color:var(--cyan); margin-bottom:22px;}
+  #intro-head{font-size:clamp(34px,7vw,68px); line-height:1.02; font-weight:600; letter-spacing:-.01em;}
+  #intro-head span{display:block; color:var(--text-mid);}
+  #intro-sub{margin-top:20px; font-size:14px; color:var(--text-mid); max-width:420px; margin-left:auto; margin-right:auto; line-height:1.5;}
+  #intro-btn{margin-top:34px; pointer-events:auto; cursor:pointer; background:transparent; border:1px solid var(--line-lo); color:var(--text-hi); font-family:var(--mono); font-size:11px; letter-spacing:.14em; padding:14px 26px; transition:.25s; text-transform:uppercase;}
+  #intro-btn:hover{border-color:var(--cyan); color:var(--cyan);}
+  #intro-skip{position:absolute; bottom:26px; right:30px; font-family:var(--mono); font-size:10px; color:var(--text-lo); cursor:pointer; pointer-events:auto; letter-spacing:.1em;}
+  #intro-skip:hover{color:var(--text-mid);}
+
+  /* ---------- SCAN CHAMBER ---------- */
+  #scan{z-index:40; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at 50% 40%, var(--bg-2), var(--bg-0)); opacity:0; transition:opacity .8s ease;}
+  #scan.show{opacity:1; pointer-events:auto;}
+  .chamber{width:min(560px,86vw); aspect-ratio:16/11; border:1px solid var(--line-lo); position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; transition:.3s;}
+  .chamber::before,.chamber::after{content:''; position:absolute; width:22px; height:22px; border:1px solid var(--text-lo);}
+  .chamber::before{top:-1px; left:-1px; border-right:none; border-bottom:none;}
+  .chamber::after{bottom:-1px; right:-1px; border-left:none; border-top:none;}
+  .chamber.drag{border-color:var(--cyan); box-shadow:0 0 40px -10px rgba(103,232,249,.25);}
+  .chamber-title{font-family:var(--mono); font-size:13px; letter-spacing:.2em; color:var(--text-hi);}
+  .chamber-sub{font-family:var(--mono); font-size:10px; letter-spacing:.1em; color:var(--text-lo);}
+  .chamber-actions{display:flex; gap:10px; margin-top:8px;}
+  .chip-btn{cursor:pointer; background:transparent; border:1px solid var(--line-lo); color:var(--text-mid); font-family:var(--mono); font-size:10px; letter-spacing:.1em; padding:10px 16px; transition:.2s; text-transform:uppercase;}
+  .chip-btn:hover{border-color:var(--cyan); color:var(--cyan);}
+  .chip-btn.primary{border-color:var(--cyan); color:var(--cyan);}
+  .chip-btn.primary:hover{background:var(--cyan); color:var(--bg-0);}
+  #scan-flow{position:absolute; top:26px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--text-lo); display:flex; gap:10px;}
+  #scan-flow span.on{color:var(--cyan);}
+
+  /* ---------- PROCESSING ---------- */
+  #proc{z-index:35; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .5s ease;}
+  #proc.show{opacity:1;}
+  #proc-panel{position:absolute; bottom:60px; left:50%; transform:translateX(-50%); text-align:center; width:340px;}
+  #proc-title{font-family:var(--mono); font-size:11px; letter-spacing:.2em; color:var(--cyan); margin-bottom:10px;}
+  .proc-row{display:flex; justify-content:space-between; font-family:var(--mono); font-size:10px; color:var(--text-mid); padding:3px 0; border-bottom:1px solid rgba(255,255,255,.04);}
+  .proc-row b{color:var(--text-hi); font-weight:500;}
+  #proc-bar{width:100%; height:2px; background:var(--line-lo); margin-top:12px; position:relative; overflow:hidden;}
+  #proc-bar i{position:absolute; left:0; top:0; bottom:0; width:0%; background:var(--cyan);}
+
+  /* ---------- MAIN APP ---------- */
+  #app-ui{z-index:20; opacity:0; transition:opacity .8s ease;}
+  #app-ui.show{opacity:1; pointer-events:auto;}
+
+  .topbar{position:absolute; top:0; left:0; right:0; display:flex; align-items:center; justify-content:space-between; padding:18px 24px; border-bottom:1px solid rgba(255,255,255,.06); background:linear-gradient(to bottom, rgba(5,8,10,.7), transparent);}
+  .brand{font-family:var(--mono); font-size:13px; letter-spacing:.22em; color:var(--text-hi);}
+  .brand b{color:var(--cyan); font-weight:500;}
+  .topbar-right{display:flex; align-items:center; gap:22px;}
+  .status{font-family:var(--mono); font-size:10px; letter-spacing:.12em; color:var(--text-lo); display:flex; align-items:center; gap:7px;}
+  .dot{width:6px; height:6px; border-radius:50%; background:var(--cyan); box-shadow:0 0 8px var(--cyan);}
+
+  .rail{position:absolute; left:0; top:64px; bottom:0; width:64px; display:flex; flex-direction:column; align-items:center; padding-top:20px; gap:4px; border-right:1px solid rgba(255,255,255,.06);}
+  .rail-btn{width:44px; height:44px; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:9px; letter-spacing:.06em; color:var(--text-lo); cursor:pointer; border:1px solid transparent; text-align:center; line-height:1.2;}
+  .rail-btn:hover{color:var(--text-hi);}
+  .rail-btn.active{color:var(--cyan); border-color:rgba(103,232,249,.3);}
+
+  .panel{position:absolute; right:24px; top:88px; width:170px; display:flex; flex-direction:column; gap:16px;}
+  .metric{border-left:1px solid var(--line-lo); padding-left:10px;}
+
+  #coords{position:absolute; left:80px; bottom:20px; font-family:var(--mono); font-size:10px; color:var(--text-lo); letter-spacing:.08em;}
+
+  #hud-context{position:absolute; left:80px; top:88px; width:180px; display:flex; flex-direction:column; gap:14px; opacity:0; transition:opacity .4s;}
+  #hud-context.show{opacity:1;}
+
+  .bottom-strip{position:absolute; bottom:0; left:0; right:0; display:flex; align-items:center; justify-content:center; gap:2px; padding:16px 24px; border-top:1px solid rgba(255,255,255,.06); background:linear-gradient(to top, rgba(5,8,10,.7), transparent);}
+  .strip-btn{cursor:pointer; background:transparent; border:1px solid transparent; color:var(--text-lo); font-family:var(--mono); font-size:10px; letter-spacing:.1em; padding:10px 16px; transition:.2s; text-transform:uppercase;}
+  .strip-btn:hover{color:var(--text-hi);}
+  .strip-btn.on{color:var(--cyan); border-color:rgba(103,232,249,.35);}
+  .strip-sep{width:1px; height:16px; background:var(--line-lo); margin:0 6px;}
+  .strip-btn.enter{color:var(--cyan); border-color:rgba(103,232,249,.35);}
+  .strip-btn.enter:hover{background:var(--cyan); color:var(--bg-0);}
+
+  /* terrain core radial menu */
+  #core-menu{position:absolute; display:none; flex-direction:column; gap:2px; background:rgba(10,15,18,.92); border:1px solid var(--line-lo); padding:6px; z-index:5;}
+  #core-menu button{background:transparent; border:none; color:var(--text-mid); font-family:var(--mono); font-size:10px; letter-spacing:.1em; padding:9px 14px; text-align:left; cursor:pointer; white-space:nowrap;}
+  #core-menu button:hover{color:var(--cyan);}
+  #core-menu button.on{color:var(--cyan);}
+
+  /* measure readout */
+  #measure-hud{position:absolute; left:50%; top:88px; transform:translateX(-50%); text-align:center; opacity:0; transition:opacity .3s; display:flex; gap:26px;}
+  #measure-hud.show{opacity:1;}
+
+  #mode-banner{position:absolute; left:50%; top:88px; transform:translateX(-50%); font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--amber); border:1px solid rgba(245,166,35,.4); padding:6px 14px; opacity:0; transition:opacity .3s;}
+  #mode-banner.show{opacity:1;}
+
+  ::selection{background:rgba(103,232,249,.3);}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ INTRO ============ -->
+  <div id="intro" class="layer active">
+    <canvas id="intro-canvas"></canvas>
+    <div id="intro-copy">
+      <div id="intro-mark">DEPTH WIZARD</div>
+      <div id="intro-head">ONE PICTURE.<span>ONE TERRAIN.</span></div>
+      <div id="intro-sub">Turn a handheld field walk into a three-dimensional terrain you can measure and explore &mdash; processed locally, no cloud required.</div>
+      <button id="intro-btn">START RECONSTRUCTION</button>
+    </div>
+    <div id="intro-skip">SKIP INTRO</div>
+  </div>
+
+  <!-- ============ SCAN CHAMBER ============ -->
+  <div id="scan" class="layer">
+    <div id="scan-flow"><span class="on">CAPTURE</span><span>&rarr;</span><span>RECONSTRUCT</span><span>&rarr;</span><span>MAP</span></div>
+    <div class="chamber" id="chamber">
+      <div class="chamber-title">DROP FIELD VIDEO</div>
+      <div class="chamber-sub">3&ndash;15 SEC HANDHELD CAPTURE &middot; MP4 / MOV</div>
+      <div class="chamber-actions">
+        <button class="chip-btn" id="btn-select">SELECT VIDEO</button>
+        <button class="chip-btn primary" id="btn-demo">USE DEMO CAPTURE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PROCESSING ============ -->
+  <div id="proc" class="layer">
+    <div id="proc-panel">
+      <div id="proc-title">RECONSTRUCTION ENGINE</div>
+      <div class="proc-row"><span>FRAME</span><b id="p-frame">000 / 082</b></div>
+      <div class="proc-row"><span>POINTS</span><b id="p-points">0</b></div>
+      <div class="proc-row"><span>DEPTH CONFIDENCE</span><b id="p-conf">0.0%</b></div>
+      <div class="proc-row"><span>SURFACE COVERAGE</span><b id="p-cov">0.0%</b></div>
+      <div id="proc-bar"><i id="proc-bar-i"></i></div>
+    </div>
+  </div>
+
+  <!-- ============ MAIN APP UI ============ -->
+  <div id="app-ui" class="layer">
+    <div class="topbar">
+      <div class="brand">DEPTH <b>WIZARD</b></div>
+      <div class="topbar-right">
+        <div class="status"><span class="dot"></span>FIELD NODE 01</div>
+        <div class="status">PROCESSING &middot; LOCAL</div>
+      </div>
+    </div>
+
+    <div class="rail">
+      <div class="rail-btn active" data-rail="capture">CAP<br>TURE</div>
+      <div class="rail-btn" data-rail="reconstruct">RECON<br>STRUCT</div>
+      <div class="rail-btn" data-rail="explore">EXP<br>LORE</div>
+      <div class="rail-btn" data-rail="analyze">ANA<br>LYZE</div>
+    </div>
+
+    <div class="panel">
+      <div class="metric"><div class="label">Altitude</div><div class="value" id="m-alt">1842<small>m</small></div></div>
+      <div class="metric"><div class="label">Slope</div><div class="value" id="m-slope">37.4<small>&deg;</small></div></div>
+      <div class="metric"><div class="label">Depth Confidence</div><div class="value" id="m-conf">94.6<small>%</small></div></div>
+      <div class="metric"><div class="label">Point Density</div><div class="value" id="m-pts">482K</div></div>
+    </div>
+
+    <div id="hud-context">
+      <div class="metric"><div class="label">Lat / Lon</div><div class="value" style="font-size:13px" id="m-latlon">31.7683, 77.1234</div></div>
+      <div class="metric"><div class="label">Surface Coverage</div><div class="value" style="font-size:13px" id="m-cov">87.2%</div></div>
+    </div>
+
+    <div id="mode-banner">DEMO SIMULATION &middot; NOT A VALIDATED PREDICTION</div>
+    <div id="measure-hud">
+      <div class="metric"><div class="label">Point A</div><div class="value" id="msr-a" style="font-size:13px">&mdash;</div></div>
+      <div class="metric"><div class="label">Distance</div><div class="value" id="msr-d" style="font-size:13px">&mdash;</div></div>
+      <div class="metric"><div class="label">Elevation Drop</div><div class="value" id="msr-e" style="font-size:13px">&mdash;</div></div>
+      <div class="metric"><div class="label">Slope</div><div class="value" id="msr-s" style="font-size:13px">&mdash;</div></div>
+    </div>
+
+    <div id="coords">X 000.0 &nbsp; Y 000.0 &nbsp; Z 000.0</div>
+
+    <div id="core-menu">
+      <button data-mode="elevation" class="on">ELEVATION</button>
+      <button data-mode="depth">DEPTH</button>
+      <button data-mode="slope">SLOPE</button>
+      <button data-mode="risk">RISK</button>
+      <button data-mode="density">DENSITY</button>
+    </div>
+
+    <div class="bottom-strip">
+      <button class="strip-btn on" data-toggle="points">POINTS</button>
+      <button class="strip-btn on" data-toggle="contour">CONTOUR</button>
+      <button class="strip-btn" data-toggle="mesh">MESH</button>
+      <button class="strip-btn" data-toggle="path">PATH</button>
+      <div class="strip-sep"></div>
+      <button class="strip-btn" data-toggle="topdown">TOP-DOWN</button>
+      <button class="strip-btn" data-toggle="measure">MEASURE</button>
+      <button class="strip-btn" data-toggle="decompose">DECOMPOSE</button>
+      <div class="strip-sep"></div>
+      <button class="strip-btn enter" id="btn-enter">ENTER TERRAIN</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* =========================================================================
+   DEPTH WIZARD — interactive prototype
+   Procedural terrain reconstruction demo built with three.js (r128).
+   All 3D is generated on-device (no external model / backend).
+   ========================================================================= */
+
+(function(){
+
+// ---------------------------------------------------------------------
+// 0. NOISE + TERRAIN GENERATION
+// ---------------------------------------------------------------------
+function hash(x,y){ const s = Math.sin(x*127.1+y*311.7)*43758.5453123; return s-Math.floor(s); }
+function smoothNoise(x,y){
+  const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
+  const a=hash(xi,yi), b=hash(xi+1,yi), c=hash(xi,yi+1), d=hash(xi+1,yi+1);
+  const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+  return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;
+}
+function fbm(x,y,oct){ let t=0,amp=.5,freq=1,max=0; for(let i=0;i<oct;i++){ t+=smoothNoise(x*freq,y*freq)*amp; max+=amp; amp*=.52; freq*=2.05;} return t/max; }
+function ridge(x,y,oct){ let t=0,amp=.5,freq=1,max=0; for(let i=0;i<oct;i++){ let n=1-Math.abs(smoothNoise(x*freq,y*freq)*2-1); t+=n*n*amp; max+=amp; amp*=.5; freq*=2.1;} return t/max; }
+
+const GRID = 68;          // vertices per side
+const SIZE = 34;          // world units per side
+const HEIGHT = 8.2;
+
+function heightAt(gx,gy){ // gx,gy in [-1,1]
+  const d = Math.sqrt(gx*gx+gy*gy);
+  const mask = Math.max(0, 1-Math.pow(d,1.7));
+  const base = fbm((gx+2)*2.1,(gy+2)*2.1,5);
+  const rid  = ridge((gx+7)*2.6,(gy+7)*2.6,4);
+  let h = (base*0.55 + rid*0.75) * mask;
+  h -= 0.06; // baseline
+  return Math.max(h,-0.05)*HEIGHT;
+}
+
+const heights = new Float32Array(GRID*GRID);
+for(let j=0;j<GRID;j++){
+  for(let i=0;i<GRID;i++){
+    const gx = (i/(GRID-1))*2-1, gy=(j/(GRID-1))*2-1;
+    heights[j*GRID+i] = heightAt(gx,gy);
+  }
+}
+function hIdx(i,j){ return heights[Math.max(0,Math.min(GRID-1,j))*GRID + Math.max(0,Math.min(GRID-1,i))]; }
+function worldXZ(i,j){ return [ (i/(GRID-1)-0.5)*SIZE, (j/(GRID-1)-0.5)*SIZE ]; }
+
+let maxH=-999,minH=999;
+for(let k=0;k<heights.length;k++){ if(heights[k]>maxH)maxH=heights[k]; if(heights[k]<minH)minH=heights[k]; }
+
+// slope (gradient magnitude) per vertex
+const slopes = new Float32Array(GRID*GRID);
+let maxSlope=0;
+for(let j=0;j<GRID;j++)for(let i=0;i<GRID;i++){
+  const dx=(hIdx(i+1,j)-hIdx(i-1,j)), dz=(hIdx(i,j+1)-hIdx(i,j-1));
+  const s=Math.sqrt(dx*dx+dz*dz);
+  slopes[j*GRID+i]=s; if(s>maxSlope)maxSlope=s;
+}
+
+// ---------------------------------------------------------------------
+// 1. RENDERER / SCENE
+// ---------------------------------------------------------------------
+const mainCanvasHolder = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.domElement.style.position='absolute';
+renderer.domElement.style.inset='0';
+renderer.domElement.style.zIndex='1';
+mainCanvasHolder.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x05080A, 0.028);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 500);
+let camTarget = new THREE.Vector3(0,1,0);
+let camSpherical = { radius: 34, theta: Math.PI*0.22, phi: Math.PI*0.36 }; // theta=azimuth, phi=polar
+function applyCamera(){
+  const {radius,theta,phi} = camSpherical;
+  camera.position.set(
+    camTarget.x + radius*Math.sin(phi)*Math.sin(theta),
+    camTarget.y + radius*Math.cos(phi),
+    camTarget.z + radius*Math.sin(phi)*Math.cos(theta)
+  );
+  camera.lookAt(camTarget);
+}
+applyCamera();
+
+// ambient light-ish (not really needed for point/line materials, kept minimal)
+scene.add(new THREE.AmbientLight(0xffffff,0.4));
+
+// ---------------------------------------------------------------------
+// 2. TERRAIN GROUP: points / wireframe / contour / bbox
+// ---------------------------------------------------------------------
+const terrainGroup = new THREE.Group();
+scene.add(terrainGroup);
+
+const pointsGroup = new THREE.Group(); terrainGroup.add(pointsGroup);
+const meshGroup = new THREE.Group(); terrainGroup.add(meshGroup);
+const contourGroup = new THREE.Group(); terrainGroup.add(contourGroup);
+const bboxGroup = new THREE.Group(); terrainGroup.add(bboxGroup);
+const pathGroup = new THREE.Group(); terrainGroup.add(pathGroup);
+
+// --- point cloud ---
+const pCount = GRID*GRID;
+const positions = new Float32Array(pCount*3);
+const colors = new Float32Array(pCount*3);
+const baseColors = new Float32Array(pCount*3); // elevation coloring cached
+const sizesAttr = new Float32Array(pCount);
+const revealOrder = new Float32Array(pCount); // for reconstruction animation, random-ish order by height
+
+const cyan = new THREE.Color(0x67E8F9);
+const grey = new THREE.Color(0x8C9A9E);
+const white = new THREE.Color(0xEFF5F5);
+const amber = new THREE.Color(0xF5A623);
+const red = new THREE.Color(0xFF5C5C);
+
+let idx=0;
+for(let j=0;j<GRID;j++){
+  for(let i=0;i<GRID;i++){
+    const [x,z] = worldXZ(i,j);
+    const y = heights[j*GRID+i];
+    positions[idx*3]=x; positions[idx*3+1]=y; positions[idx*3+2]=z;
+    const t = (y-minH)/(maxH-minH);
+    const col = grey.clone().lerp(white, t*0.6).lerp(cyan, Math.max(0,t-0.65)*1.4);
+    baseColors[idx*3]=col.r; baseColors[idx*3+1]=col.g; baseColors[idx*3+2]=col.b;
+    colors[idx*3]=col.r; colors[idx*3+1]=col.g; colors[idx*3+2]=col.b;
+    sizesAttr[idx] = 0.09 + Math.random()*0.05;
+    revealOrder[idx] = t*0.7 + Math.random()*0.3; // peaks tend to resolve slightly later, felt more "building up"
+    idx++;
+  }
+}
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+pGeo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+const pMat = new THREE.PointsMaterial({size:0.16, vertexColors:true, transparent:true, opacity:0.95, sizeAttenuation:true});
+const pointCloud = new THREE.Points(pGeo, pMat);
+pointsGroup.add(pointCloud);
+
+// --- wireframe mesh ---
+const planeGeo = new THREE.PlaneGeometry(SIZE, SIZE, GRID-1, GRID-1);
+planeGeo.rotateX(-Math.PI/2);
+const posAttr = planeGeo.attributes.position;
+for(let k=0;k<posAttr.count;k++){
+  const j = Math.floor(k/GRID), i = k%GRID;
+  posAttr.setY(k, heights[j*GRID+i]);
+}
+planeGeo.computeVertexNormals();
+const wireMat = new THREE.MeshBasicMaterial({color:0x3E484B, wireframe:true, transparent:true, opacity:0.35});
+const wireMesh = new THREE.Mesh(planeGeo, wireMat);
+meshGroup.add(wireMesh);
+meshGroup.visible = false;
+
+// --- contour lines (marching squares over discrete elevation bands) ---
+function buildContours(){
+  const levels = 9;
+  const segs = [];
+  for(let l=1;l<levels;l++){
+    const level = minH + (maxH-minH)*(l/levels);
+    for(let j=0;j<GRID-1;j++){
+      for(let i=0;i<GRID-1;i++){
+        const h00=hIdx(i,j), h10=hIdx(i+1,j), h11=hIdx(i+1,j+1), h01=hIdx(i,j+1);
+        const c00=[worldXZ(i,j)], c10=worldXZ(i+1,j), c11=worldXZ(i+1,j+1), c01=worldXZ(i,j+1);
+        const p00=worldXZ(i,j), p10=worldXZ(i+1,j), p11=worldXZ(i+1,j+1), p01=worldXZ(i,j+1);
+        const pts=[];
+        function edge(hA,hB,pA,pB){
+          if((hA-level)*(hB-level) < 0){
+            const t = (level-hA)/(hB-hA);
+            pts.push([pA[0]+(pB[0]-pA[0])*t, level, pA[1]+(pB[1]-pA[1])*t]);
+          }
+        }
+        edge(h00,h10,p00,p10);
+        edge(h10,h11,p10,p11);
+        edge(h11,h01,p11,p01);
+        edge(h01,h00,p01,p00);
+        if(pts.length>=2){
+          segs.push(pts[0][0],pts[0][1]+0.01,pts[0][2], pts[1][0],pts[1][1]+0.01,pts[1][2]);
+          if(pts.length===4){ segs.push(pts[2][0],pts[2][1]+0.01,pts[2][2], pts[3][0],pts[3][1]+0.01,pts[3][2]); }
+        }
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(segs,3));
+  const m = new THREE.LineBasicMaterial({color:0x67E8F9, transparent:true, opacity:0.55});
+  return new THREE.LineSegments(g,m);
+}
+const contourLines = buildContours();
+contourGroup.add(contourLines);
+contourGroup.visible = true;
+
+// --- bounding box ---
+const bbox = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(SIZE*1.02, (maxH-minH)*1.15, SIZE*1.02)),
+  new THREE.LineBasicMaterial({color:0x3E484B, transparent:true, opacity:0.4})
+);
+bbox.position.y = (maxH+minH)/2*0.4 + 1.6;
+bboxGroup.add(bbox);
+
+// --- capture path (orbital trajectory) ---
+const pathPts = [];
+const frameCount = 18;
+for(let k=0;k<=frameCount;k++){
+  const a = (k/frameCount)*Math.PI*1.65 + Math.PI*0.15;
+  const r = SIZE*0.62;
+  pathPts.push(new THREE.Vector3(Math.cos(a)*r, HEIGHT*0.95 + Math.sin(a*3)*0.8, Math.sin(a)*r));
+}
+const pathCurve = new THREE.CatmullRomCurve3(pathPts);
+const pathGeo = new THREE.BufferGeometry().setFromPoints(pathCurve.getPoints(160));
+const pathLine = new THREE.Line(pathGeo, new THREE.LineBasicMaterial({color:0xF5A623, transparent:true, opacity:0.65}));
+pathGroup.add(pathLine);
+const frameNodesGeo = new THREE.BufferGeometry().setFromPoints(pathPts);
+const frameNodes = new THREE.Points(frameNodesGeo, new THREE.PointsMaterial({color:0xF5A623, size:0.32, sizeAttenuation:true}));
+pathGroup.add(frameNodes);
+pathGroup.visible = false;
+
+// --- terrain core (clickable object) ---
+const coreGeo = new THREE.IcosahedronGeometry(0.55, 1);
+const coreMat = new THREE.MeshBasicMaterial({color:0x67E8F9, wireframe:true, transparent:true, opacity:0.9});
+const core = new THREE.Mesh(coreGeo, coreMat);
+core.position.set(0, maxH+2.4, 0);
+terrainGroup.add(core);
+const coreGlow = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9,1), new THREE.MeshBasicMaterial({color:0x67E8F9, transparent:true, opacity:0.06}));
+core.add(coreGlow);
+
+// --- ambient drifting particles ---
+const driftCount = 240;
+const driftPos = new Float32Array(driftCount*3);
+for(let k=0;k<driftCount;k++){
+  driftPos[k*3]=(Math.random()-0.5)*SIZE*1.6;
+  driftPos[k*3+1]=Math.random()*HEIGHT*2 - 1;
+  driftPos[k*3+2]=(Math.random()-0.5)*SIZE*1.6;
+}
+const driftGeo = new THREE.BufferGeometry();
+driftGeo.setAttribute('position', new THREE.BufferAttribute(driftPos,3));
+const driftMat = new THREE.PointsMaterial({color:0x3E484B, size:0.05, transparent:true, opacity:0.5});
+const drift = new THREE.Points(driftGeo, driftMat);
+scene.add(drift);
+
+// measurement markers
+const measureGroup = new THREE.Group(); scene.add(measureGroup);
+let measureA=null, measureB=null;
+let measureLine=null;
+
+// ---------------------------------------------------------------------
+// 3. STATE
+// ---------------------------------------------------------------------
+const state = {
+  stage: 'intro',        // intro -> scan -> proc -> app
+  mode: 'elevation',     // elevation | depth | slope | risk | density
+  entered: false,
+  decomposed: false,
+  measuring: false,
+  topdown: false,
+  dragging:false, lastX:0, lastY:0,
+  idleRotate:true,
+};
+
+// ---------------------------------------------------------------------
+// 4. RENDER LOOP
+// ---------------------------------------------------------------------
+const clock = new THREE.Clock();
+function tick(){
+  requestAnimationFrame(tick);
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+
+  if(state.idleRotate && !state.dragging && state.stage==='app'){
+    camSpherical.theta += dt*0.035;
+  }
+  applyCamera();
+
+  core.rotation.y += dt*0.3;
+  core.rotation.x += dt*0.12;
+  core.position.y = maxH+2.4 + Math.sin(t*0.8)*0.18;
+
+  drift.rotation.y += dt*0.01;
+
+  renderer.render(scene, camera);
+}
+tick();
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------------------------------------------------------------------
+// 5. CUSTOM ORBIT DRAG CONTROLS (main canvas)
+// ---------------------------------------------------------------------
+renderer.domElement.addEventListener('pointerdown', (e)=>{
+  if(state.stage!=='app') return;
+  state.dragging=true; state.lastX=e.clientX; state.lastY=e.clientY;
+});
+window.addEventListener('pointerup', ()=>{ state.dragging=false; });
+window.addEventListener('pointermove', (e)=>{
+  const rect = renderer.domElement.getBoundingClientRect();
+  const nx = ((e.clientX-rect.left)/rect.width*2-1);
+  const ny = -((e.clientY-rect.top)/rect.height*2-1);
+  if(state.stage==='app'){
+    const wx = (nx*SIZE/2).toFixed(1), wz=(-ny*SIZE/2).toFixed(1);
+    document.getElementById('coords').textContent = `X ${wx} \u00A0 Y ${(0).toFixed(1)} \u00A0 Z ${wz}`;
+  }
+  if(!state.dragging) return;
+  const dx = e.clientX-state.lastX, dy=e.clientY-state.lastY;
+  state.lastX=e.clientX; state.lastY=e.clientY;
+  camSpherical.theta -= dx*0.005;
+  camSpherical.phi = Math.min(Math.PI*0.49, Math.max(0.12, camSpherical.phi - dy*0.004));
+});
+renderer.domElement.addEventListener('wheel', (e)=>{
+  if(state.stage!=='app') return;
+  e.preventDefault();
+  camSpherical.radius = Math.min(70, Math.max(4, camSpherical.radius + e.deltaY*0.02));
+},{passive:false});
+
+// raycasting for core click + measure tool
+const raycaster = new THREE.Raycaster();
+raycaster.params.Points.threshold = 0.35;
+const mouseNDC = new THREE.Vector2();
+renderer.domElement.addEventListener('click', (e)=>{
+  if(state.stage!=='app') return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouseNDC.x = ((e.clientX-rect.left)/rect.width)*2-1;
+  mouseNDC.y = -((e.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouseNDC, camera);
+
+  // core click
+  const coreHit = raycaster.intersectObject(core, true);
+  if(coreHit.length){ toggleCoreMenu(e.clientX, e.clientY); return; }
+
+  if(state.measuring){
+    const hit = raycaster.intersectObject(wireMesh.visible?wireMesh:pointCloud, true);
+    const geomHit = raycaster.intersectObjects([wireMesh, pointCloud], true);
+    const best = geomHit[0];
+    if(best){ placeMeasurePoint(best.point); }
+  }
+});
+
+// ---------------------------------------------------------------------
+// 6. UI WIRING — INTRO
+// ---------------------------------------------------------------------
+// small intro particle sketch (separate lightweight canvas scene)
+const introCanvas = document.getElementById('intro-canvas');
+const iRenderer = new THREE.WebGLRenderer({canvas:introCanvas, antialias:true, alpha:true});
+iRenderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+iRenderer.setSize(window.innerWidth, window.innerHeight);
+const iScene = new THREE.Scene();
+const iCamera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+iCamera.position.set(0,2.4,9);
+iCamera.lookAt(0,0.6,0);
+const iCount = GRID*GRID;
+const iPos = new Float32Array(iCount*3);
+const iTarget = new Float32Array(iCount*3);
+for(let k=0;k<iCount;k++){
+  iTarget[k*3]=positions[k*3]*0.24; iTarget[k*3+1]=positions[k*3+1]*0.24+0.3; iTarget[k*3+2]=positions[k*3+2]*0.24;
+  iPos[k*3]=(Math.random()-0.5)*14; iPos[k*3+1]=(Math.random()-0.5)*8+2; iPos[k*3+2]=(Math.random()-0.5)*14;
+}
+const iGeo = new THREE.BufferGeometry();
+iGeo.setAttribute('position', new THREE.BufferAttribute(iPos,3));
+const iMat = new THREE.PointsMaterial({color:0xAEB8BC, size:0.05, transparent:true, opacity:0.85});
+const iPoints = new THREE.Points(iGeo, iMat);
+iScene.add(iPoints);
+let iProgress = 0;
+function introTick(){
+  requestAnimationFrame(introTick);
+  if(state.stage!=='intro'){ iRenderer.render(iScene,iCamera); return; }
+  iProgress = Math.min(1, iProgress + 0.006);
+  const arr = iGeo.attributes.position.array;
+  const ease = 1-Math.pow(1-iProgress,3);
+  for(let k=0;k<iCount;k++){
+    arr[k*3]   += (iTarget[k*3]-arr[k*3]) * 0.02;
+    arr[k*3+1] += (iTarget[k*3+1]-arr[k*3+1]) * 0.02;
+    arr[k*3+2] += (iTarget[k*3+2]-arr[k*3+2]) * 0.02;
+  }
+  iGeo.attributes.position.needsUpdate = true;
+  iPoints.rotation.y += 0.0015;
+  iRenderer.render(iScene, iCamera);
+  if(iProgress>0.45){
+    document.getElementById('intro-copy').classList.add('show');
+  }
+}
+introTick();
+
+document.getElementById('intro-btn').addEventListener('click', goToScan);
+document.getElementById('intro-skip').addEventListener('click', goToScan);
+function goToScan(){
+  state.stage='scan';
+  document.getElementById('intro').style.opacity='0';
+  setTimeout(()=>{ document.getElementById('intro').classList.remove('active'); },1100);
+  const scan = document.getElementById('scan');
+  scan.classList.add('show');
+}
+
+// ---------------------------------------------------------------------
+// 7. UI WIRING — SCAN CHAMBER
+// ---------------------------------------------------------------------
+const chamber = document.getElementById('chamber');
+['dragenter','dragover'].forEach(ev=>chamber.addEventListener(ev,(e)=>{e.preventDefault(); chamber.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>chamber.addEventListener(ev,(e)=>{e.preventDefault(); chamber.classList.remove('drag'); if(ev==='drop') beginReconstruction();}));
+document.getElementById('btn-demo').addEventListener('click', beginReconstruction);
+document.getElementById('btn-select').addEventListener('click', beginReconstruction);
+
+function beginReconstruction(){
+  state.stage='proc';
+  document.getElementById('scan').classList.remove('show');
+  const proc = document.getElementById('proc');
+  proc.classList.add('show');
+  runProcessingSequence();
+}
+
+// ---------------------------------------------------------------------
+// 8. PROCESSING SEQUENCE (fake reconstruction, drives point reveal)
+// ---------------------------------------------------------------------
+// start points invisible/collapsed, main terrain hidden underneath UI
+terrainGroup.visible = true;
+pMat.opacity = 0; contourLines.material.opacity = 0; bbox.material.opacity = 0;
+
+function runProcessingSequence(){
+  const dur = 4200; const start = performance.now();
+  const totalFrames = 82;
+  function step(now){
+    const p = Math.min(1, (now-start)/dur);
+    document.getElementById('p-frame').textContent = `${String(Math.floor(p*totalFrames)).padStart(3,'0')} / ${totalFrames}`;
+    document.getElementById('p-points').textContent = Math.floor(p*pCount).toLocaleString();
+    document.getElementById('p-conf').textContent = (p*94.6).toFixed(1)+'%';
+    document.getElementById('p-cov').textContent = (p*87.2).toFixed(1)+'%';
+    document.getElementById('proc-bar-i').style.width = (p*100)+'%';
+
+    // reveal points progressively based on revealOrder threshold
+    pMat.opacity = Math.min(0.95, p*1.3);
+    for(let k=0;k<pCount;k++){
+      const on = revealOrder[k] <= p;
+      colors[k*3]   = on? baseColors[k*3]   : 0.02;
+      colors[k*3+1] = on? baseColors[k*3+1] : 0.02;
+      colors[k*3+2] = on? baseColors[k*3+2] : 0.02;
+    }
+    pGeo.attributes.color.needsUpdate = true;
+    if(p>0.55) contourLines.material.opacity = Math.min(0.55,(p-0.55)*2.2);
+    if(p>0.7) bbox.material.opacity = Math.min(0.4,(p-0.7)*1.6);
+
+    if(p<1){ requestAnimationFrame(step); }
+    else { setTimeout(enterApp, 350); }
+  }
+  requestAnimationFrame(step);
+}
+
+function enterApp(){
+  state.stage='app';
+  document.getElementById('proc').classList.remove('show');
+  document.getElementById('app-ui').classList.add('show');
+  camSpherical.radius=34;
+}
+
+// ---------------------------------------------------------------------
+// 9. BOTTOM STRIP TOGGLES
+// ---------------------------------------------------------------------
+document.querySelectorAll('.strip-btn[data-toggle]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const key = btn.dataset.toggle;
+    if(key==='points'){ pointsGroup.visible=!pointsGroup.visible; btn.classList.toggle('on'); }
+    if(key==='contour'){ contourGroup.visible=!contourGroup.visible; btn.classList.toggle('on'); }
+    if(key==='mesh'){ meshGroup.visible=!meshGroup.visible; btn.classList.toggle('on'); }
+    if(key==='path'){ pathGroup.visible=!pathGroup.visible; btn.classList.toggle('on'); }
+    if(key==='topdown'){ toggleTopdown(btn); }
+    if(key==='measure'){ toggleMeasure(btn); }
+    if(key==='decompose'){ toggleDecompose(btn); }
+  });
+});
+
+function toggleTopdown(btn){
+  state.topdown = !state.topdown;
+  btn.classList.toggle('on');
+  state.idleRotate = !state.topdown;
+  if(state.topdown){
+    camSpherical.phi = 0.06; camSpherical.radius = 30;
+  } else {
+    camSpherical.phi = Math.PI*0.36; camSpherical.radius = 34;
+  }
+}
+
+function toggleMeasure(btn){
+  state.measuring = !state.measuring;
+  btn.classList.toggle('on');
+  document.getElementById('measure-hud').classList.toggle('show', state.measuring);
+  if(!state.measuring){
+    measureA=null; measureB=null;
+    measureGroup.clear();
+    document.getElementById('msr-a').textContent='\u2014';
+    document.getElementById('msr-d').textContent='\u2014';
+    document.getElementById('msr-e').textContent='\u2014';
+    document.getElementById('msr-s').textContent='\u2014';
+  }
+}
+function placeMeasurePoint(pt){
+  const marker = new THREE.Mesh(new THREE.SphereGeometry(0.14,10,10), new THREE.MeshBasicMaterial({color:0x67E8F9}));
+  marker.position.copy(pt);
+  if(!measureA){
+    measureA = pt.clone(); measureGroup.clear(); measureGroup.add(marker);
+    document.getElementById('msr-a').textContent = `${pt.y.toFixed(1)}m`;
+  } else {
+    measureB = pt.clone(); measureGroup.add(marker);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([measureA,measureB]), new THREE.LineBasicMaterial({color:0xF5A623}));
+    measureGroup.add(line);
+    const dist = measureA.distanceTo(measureB);
+    const drop = Math.abs(measureA.y-measureB.y);
+    const run = Math.sqrt(dist*dist-drop*drop);
+    const angle = run>0.001? Math.atan2(drop,run)*180/Math.PI : 0;
+    document.getElementById('msr-d').textContent = `${(dist*8.2).toFixed(1)}m`;
+    document.getElementById('msr-e').textContent = `${(drop*8.2).toFixed(1)}m`;
+    document.getElementById('msr-s').textContent = `${angle.toFixed(1)}\u00b0`;
+    measureA=null; measureB=null;
+  }
+}
+
+function toggleDecompose(btn){
+  state.decomposed = !state.decomposed;
+  btn.classList.toggle('on');
+  const target = state.decomposed;
+  const offsets = { points: target? 9:0, mesh: target? 3:0, contour: target? -3:0, bbox: target? -6:0 };
+  animateGroupY(pointsGroup, offsets.points);
+  animateGroupY(meshGroup, offsets.mesh);
+  animateGroupY(contourGroup, offsets.contour);
+  if(target){ meshGroup.visible = true; contourGroup.visible = true; }
+}
+function animateGroupY(group, targetY){
+  const startY = group.position.y; const startT = performance.now(); const dur=700;
+  function step(now){
+    const p = Math.min(1,(now-startT)/dur); const e = 1-Math.pow(1-p,3);
+    group.position.y = startY + (targetY-startY)*e;
+    if(p<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ---------------------------------------------------------------------
+// 10. ENTER TERRAIN (signature dive)
+// ---------------------------------------------------------------------
+document.getElementById('btn-enter').addEventListener('click', ()=>{
+  state.entered = !state.entered;
+  const btn = document.getElementById('btn-enter');
+  btn.textContent = state.entered? 'EXIT TERRAIN' : 'ENTER TERRAIN';
+  document.getElementById('hud-context').classList.toggle('show', state.entered);
+  const targetRadius = state.entered? 7 : 34;
+  const targetPhi = state.entered? Math.PI*0.46 : Math.PI*0.36;
+  animateCam(targetRadius, targetPhi);
+});
+function animateCam(targetRadius, targetPhi){
+  const startR = camSpherical.radius, startP = camSpherical.phi, t0=performance.now(); const dur=1400;
+  state.idleRotate=false;
+  function step(now){
+    const p = Math.min(1,(now-t0)/dur); const e = 1-Math.pow(1-p,3);
+    camSpherical.radius = startR + (targetRadius-startR)*e;
+    camSpherical.phi = startP + (targetPhi-startP)*e;
+    if(p<1) requestAnimationFrame(step); else state.idleRotate = !state.entered;
+  }
+  requestAnimationFrame(step);
+}
+
+// ---------------------------------------------------------------------
+// 11. TERRAIN CORE — mode switching menu
+// ---------------------------------------------------------------------
+const coreMenu = document.getElementById('core-menu');
+function toggleCoreMenu(x,y){
+  const showing = coreMenu.style.display==='flex';
+  if(showing){ coreMenu.style.display='none'; return; }
+  coreMenu.style.left = (x+14)+'px';
+  coreMenu.style.top = (y-10)+'px';
+  coreMenu.style.display='flex';
+}
+document.addEventListener('click',(e)=>{
+  if(!coreMenu.contains(e.target) && e.target.tagName!=='CANVAS'){ coreMenu.style.display='none'; }
+});
+coreMenu.querySelectorAll('button').forEach(b=>{
+  b.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    coreMenu.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    setMode(b.dataset.mode);
+    coreMenu.style.display='none';
+  });
+});
+
+function setMode(mode){
+  state.mode = mode;
+  document.getElementById('mode-banner').classList.toggle('show', mode==='risk');
+  const arr = pGeo.attributes.color.array;
+  for(let k=0;k<pCount;k++){
+    let col;
+    const t = (positions[k*3+1]-minH)/(maxH-minH);
+    const s = slopes[k]/maxSlope;
+    if(mode==='elevation'){
+      const band = Math.floor(t*8)/8;
+      col = grey.clone().lerp(white, band*0.6).lerp(cyan, Math.max(0,band-0.6)*1.6);
+    } else if(mode==='depth'){
+      const d = Math.min(1, (positions[k*3]+SIZE/2)/SIZE * 0.5 + (positions[k*3+2]+SIZE/2)/SIZE * 0.5);
+      col = new THREE.Color(0x121A1D).lerp(new THREE.Color(0xC7D2D4), d);
+    } else if(mode==='slope'){
+      col = grey.clone().lerp(amber, Math.min(1,s*1.4));
+    } else if(mode==='risk'){
+      col = s>0.55 ? red.clone() : (s>0.3? amber.clone() : new THREE.Color(0x2A3234));
+    } else { // density
+      const dens = (Math.sin(positions[k*3]*3.1)+Math.cos(positions[k*3+2]*2.7))*0.5+0.5;
+      col = grey.clone().lerp(cyan, dens*0.6);
+    }
+    arr[k*3]=col.r; arr[k*3+1]=col.g; arr[k*3+2]=col.b;
+  }
+  pGeo.attributes.color.needsUpdate = true;
+}
+
+})();
+</script>
+</body>
+</html>

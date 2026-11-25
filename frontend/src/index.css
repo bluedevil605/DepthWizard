@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+@theme {
+  --font-mono: 'Space Mono', 'IBM Plex Mono', monospace;
+  --font-heading: 'Space Grotesk', sans-serif;
+  /* Japanese landscape palette (crimson & stone) */
+  --color-void: #211E1B;          /* Near-black charcoal deep shadow */
+  --color-panel: #1A1816;         /* Translucent warm charcoal panel */
+  --color-line: #5A564C;          /* Warm slate gray */
+  --color-mid: #8B8478;           /* Muted taupe */
+  --color-light: #B7AF9F;         /* Warm stone-gray atmosphere */
+  --color-haze: #C7C0B0;          /* Lighter haze tone */
+  --color-nearwhite: #D9D2C2;     /* Snow / mist highlights */
+  --color-purewhite: #FFFFFF;
+  --color-risk-warm: #D9D2C2;
+  
+  /* Primary accent — vermilion red sun & foliage */
+  --color-accent: #E0433C;        /* Bright vermilion red */
+  --color-accent-vermilion: #C4272B; /* Vermilion base */
+  --color-accent-crimson: #9E1B1F;   /* Deeper foliage crimson */
+  --color-accent-dim: #5C1315;       /* Foliage shadow dark maroon */
+  --color-on-accent: #FFFFFF;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-mono);
+  background-color: #211E1B;
+  color: #D9D2C2;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+/* Technical Instrument Panel - Japanese Charcoal & Warm Stone */
+.mono-panel {
+  background: rgba(26, 24, 22, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #5A564C;
+}
+
+.mono-panel-hover {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mono-panel-hover:hover {
+  background: rgba(33, 30, 27, 0.95);
+  border-color: #8B8478;
+  box-shadow: 0 0 20px rgba(224, 67, 60, 0.12);
+}
+
+/* Scanline Pass for Drone POV */
+.scanline-overlay {
+  background: linear-gradient(
+    to bottom,
+    rgba(217, 210, 194, 0),
+    rgba(217, 210, 194, 0) 50%,
+    rgba(33, 30, 27, 0.35) 50%,
+    rgba(33, 30, 27, 0.35)
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+}
+
+/* Custom hairline borders & technical grids */
+.border-hairline {
+  border-width: 1px;
+  border-color: #5A564C;
+}
+
+.bg-grid-mono {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(217, 210, 194, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(217, 210, 194, 0.04) 1px, transparent 1px);
+}
+
+/* Pure White / Mist Signature Flash Effect */
+.flash-white-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: #D9D2C2;
+  z-index: 9999;
+  pointer-events: none;
+  animation: pureWhiteFlash 0.25s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+@keyframes pureWhiteFlash {
+  0% { opacity: 1; }
+  100% { opacity: 0; display: none; }
+}
+
+/* Custom warm stone scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #211E1B;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #5A564C;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8B8478;
+}
+
