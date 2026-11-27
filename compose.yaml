@@ -1,0 +1,36 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      PORT: 8000
+      HF_HOME: /tmp/huggingface
+      YOLO_CONFIG_DIR: /tmp/depthwizard-ultralytics
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - backend-outputs:/app/static/outputs
+      - backend-uploads:/app/static/uploads
+      - huggingface-cache:/tmp/huggingface
+      - yolo-cache:/tmp/depthwizard-ultralytics
+
+  frontend:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_BACKEND_PROXY_TARGET: http://backend:8000
+    ports:
+      - "127.0.0.1:5175:5175"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  backend-outputs:
+  backend-uploads:
+  frontend-node-modules:
+  huggingface-cache:
+  yolo-cache:

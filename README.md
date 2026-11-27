@@ -114,56 +114,17 @@ npm run dev
 
 Visit **`http://localhost:5175`** in your browser.
 
-## ☁️ Vercel Deployment
+### Run the full stack with Docker Compose
 
-The frontend and FastAPI backend are separate Vercel projects. The backend runs as a Python Function and uses Vercel Blob for uploaded imagery and generated assets; local development continues to use the Vite proxy and local files.
+With Docker Desktop running, start both services from the repository root:
 
-### Create the projects
-
-1. Import this repository twice in Vercel.
-2. Set the first project's **Root Directory** to `frontend` and the second to `backend`.
-3. Connect the same **public** Vercel Blob store to both projects. The frontend needs the store's `BLOB_READ_WRITE_TOKEN`; the backend uses its Vercel OIDC connection.
-4. Set the backend project's Python version to **3.12** (also specified in `backend/.python-version`), enable **Large Functions**, and set `VERCEL_SUPPORT_LARGE_FUNCTIONS=1`.
-5. Configure **All Deployments** protection for both projects, including Production and Preview. Standard Protection alone leaves production domains public. Password Protection is plan-dependent (Pro or Enterprise; not Hobby); Vercel Authentication restricts access to team members rather than public demo users.
-
-If your Vercel plan cannot protect the production deployments for public demo users, leave `BLOB_UPLOADS_ENABLED` unset/false until application-level authentication is added.
-
-### Environment variables
-
-Set these in the Vercel project settings:
-
-**Frontend**
-
-```text
-VITE_API_BASE_URL=https://<backend-project>.vercel.app
-VITE_USE_BLOB_UPLOAD=true
-BLOB_UPLOADS_ENABLED=true
-BLOB_READ_WRITE_TOKEN=<read-write token from the connected Blob store>
+```bash
+docker compose up --build
 ```
 
-`BLOB_READ_WRITE_TOKEN` must remain a server-side variable; do not prefix it with `VITE_`.
+Open `http://localhost:5175`. The first run builds the backend image, installs frontend dependencies, and downloads the depth model; initial startup can take several minutes. API and static-file requests are proxied from Vite to the backend container. Named volumes preserve generated outputs, uploads, dependency files, and model caches between runs.
 
-**Backend**
-
-```text
-CORS_ORIGINS=https://<frontend-project>.vercel.app
-BLOB_UPLOADS_ENABLED=true
-HF_HOME=/tmp/huggingface
-YOLO_CONFIG_DIR=/tmp/depthwizard-ultralytics
-```
-
-Include any frontend Preview/custom domains that need API access in `CORS_ORIGINS`. The frontend sends credentials so Vercel deployment protection can guard cross-project API requests. Do not set `BLOB_UPLOADS_ENABLED=true` unless both deployments are protected.
-
-### Deploy and verify
-
-- Deploy the backend first, then set its deployment URL as `VITE_API_BASE_URL` in the frontend project and deploy the frontend.
-- Visit both protected deployment URLs in a browser and complete Vercel's protection prompt before testing cross-project API calls.
-- Check `<backend-url>/api/health`, then try a sample and an image upload.
-- The depth model is downloaded on the first processing request; cold starts can take longer. The model's cache is placed in `/tmp`, and generated files are uploaded to Blob because Vercel Function filesystems are ephemeral.
-- Uploaded imagery and generated outputs are publicly accessible through the connected Blob store. Do not upload sensitive imagery.
-- `backend/.vercelignore` excludes the local virtual environment, test/tool artifacts, uploads, and stale generated outputs while retaining the small precomputed Mount St. Helens demo bundle. It does not delete anything from the working tree.
-
----
+Stop the services with `Ctrl+C`, then run `docker compose down` to remove the containers. Use `docker compose down -v` only if you also want to delete the named volumes and their generated data/caches.
 
 ## 🎮 Interactive Features & Controls
 
